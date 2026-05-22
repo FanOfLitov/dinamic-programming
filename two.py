@@ -1,165 +1,438 @@
 # -*- coding: utf-8 -*-
 
-
-import os
+import numpy as np
 import matplotlib.pyplot as plt
 
-OUT_DIR = "pr2_output"
-os.makedirs(OUT_DIR, exist_ok=True)
+print("=" * 100)
+print("ПРАКТИЧЕСКАЯ РАБОТА №2")
+print("Вариант 32")
+print("=" * 100)
 
+# =========================================================
+# ИСХОДНЫЕ ДАННЫЕ
+# =========================================================
 
-def solve_financing(C, effects):
-    """
-    effects[i][j] = эффект i-го мероприятия при финансировании x_grid[j].
-    x_grid = [0, delta, 2delta, ..., C]
-    """
-    n = len(effects)
-    steps = len(effects[0]) - 1
-    delta = C // steps
-    x_grid = [j * delta for j in range(steps + 1)]
+n = 6
+C = 180
+delta = 20
 
-    dp = [[0] * (steps + 1) for _ in range(n + 1)]
-    choice = [[0] * (steps + 1) for _ in range(n + 1)]
+X = np.arange(0, C + delta, delta)
 
-    for i in range(1, n + 1):
-        for budget_step in range(steps + 1):
-            best = -10**18
-            best_alloc = 0
-            for alloc_step in range(budget_step + 1):
-                val = effects[i - 1][alloc_step] + dp[i - 1][budget_step - alloc_step]
-                if val > best:
-                    best = val
-                    best_alloc = alloc_step
-            dp[i][budget_step] = best
-            choice[i][budget_step] = best_alloc
+F_matrix = [
+    [0, 20, 44, 67, 85, 98, 110, 117, 121, 123],
+    [0, 28, 54, 72, 88, 106, 119, 128, 134, 136],
+    [0, 23, 44, 64, 80, 94, 105, 114, 118, 119],
+    [0, 26, 46, 67, 87, 101, 111, 120, 125, 127],
+    [0, 21, 45, 66, 87, 102, 114, 122, 126, 128],
+    [0, 22, 48, 67, 85, 99, 111, 119, 125, 126],
+]
 
-    allocations = {}
-    for budget_step in range(steps + 1):
-        x = [0] * n
-        b = budget_step
-        for i in range(n, 0, -1):
-            alloc = choice[i][b]
-            x[i - 1] = alloc * delta
-            b -= alloc
-        allocations[x_grid[budget_step]] = x
+print("\nИСХОДНЫЕ ДАННЫЕ:")
+print(f"Количество мероприятий n = {n}")
+print(f"Общий объём финансирования C = {C}")
+print(f"Шаг финансирования Δ = {delta}")
+print(f"X = {list(X)}")
 
-    return x_grid, dp, choice, allocations
+for i, row in enumerate(F_matrix, start=1):
+    print(f"E{i}(x) = {row}")
 
+# =========================================================
+# ДИНАМИЧЕСКОЕ ПРОГРАММИРОВАНИЕ
+# =========================================================
 
-def main():
-    print("Практическая работа №2. Вариант 32")
-    print("Задача оптимального финансирования мероприятий по обеспечению ИБ.")
+g = np.zeros((n + 1, len(X)))
+choice = np.zeros((n + 1, len(X)), dtype=int)
 
-    n = 6
-    C = 180
-    delta = 20
-    x_values = [20, 40, 60, 80, 100, 120, 140, 160, 180]
+for i in range(1, n + 1):
 
-    # Добавляем эффект при нулевом финансировании: 0.
-    effects = [
-        [0, 20, 44, 67, 85, 98, 110, 117, 121, 123],
-        [0, 28, 54, 72, 88, 106, 119, 128, 134, 136],
-        [0, 23, 44, 64, 80, 94, 105, 114, 118, 119],
-        [0, 26, 46, 67, 87, 101, 111, 120, 125, 127],
-        [0, 21, 45, 66, 87, 102, 114, 122, 126, 128],
-        [0, 22, 48, 67, 85, 99, 111, 119, 125, 126],
-    ]
+    for j, x in enumerate(X):
 
-    print("\nИсходные данные:")
-    print(f"n={n}, C={C}, Δ={delta}")
-    print(f"x={x_values}")
-    for i, row in enumerate(effects, 1):
-        print(f"E{i}={row[1:]}")
+        best_value = -1
+        best_x = 0
 
-    x_grid, dp, choice, allocations = solve_financing(C, effects)
-    F_star = dp[n][-1]
-    x_star = allocations[C]
+        for k, xi in enumerate(X):
 
-    print("\nТаблица динамического программирования:")
-    header = "x".rjust(6)
-    for i in range(1, n + 1):
-        header += f" | g{i}(x)".rjust(10)
-    print(header)
-    print("-" * len(header))
-    for idx, x in enumerate(x_grid):
-        line = f"{x:>6}"
-        for i in range(1, n + 1):
-            line += f" | {dp[i][idx]:>7}"
-        print(line)
+            if xi <= x:
 
-    print("\nОптимальное распределение финансирования:")
-    for i, xi in enumerate(x_star, 1):
-        print(f"x{i} = {xi}")
-    print(f"F* = {F_star}")
+                remaining_index = int((x - xi) // delta)
 
-    # Показатели динамики прироста эффекта
-    print("\nПоказатели динамики прироста эффекта:")
-    print(f"{'j':>2} | {'x_j':>5} | {'F*_j':>6} | {'δF_j':>6} | {'L_j':>8} | {'v_j':>8} | {'η_j':>8}")
-    print("-" * 64)
+                value = F_matrix[i - 1][k] + g[i - 1][remaining_index]
 
-    prev = 0
-    dynamics = []
-    for j in range(1, len(x_grid)):
-        xj = x_grid[j]
-        Fj = dp[n][j]
-        dF = Fj - prev
-        # По формуле методички: L_j = F*_j * C / x_j
-        Lj = Fj * C / xj if xj != 0 else 0
-        vj = F_star / Lj if Lj != 0 else 0
-        etaj = 1 / vj if vj != 0 else 0
-        dynamics.append((j, xj, Fj, dF, Lj, vj, etaj))
-        print(f"{j:>2} | {xj:>5} | {Fj:>6} | {dF:>6} | {Lj:>8.2f} | {vj:>8.3f} | {etaj:>8.3f}")
-        prev = Fj
+                if value >= best_value:
+                    best_value = value
+                    best_x = xi
 
-    Eff = F_star / C
-    print(f"\nЭффективность реализации мероприятий Eff = F*/C = {F_star}/{C} = {Eff:.4f}")
+        g[i][j] = best_value
+        choice[i][j] = best_x
 
-    # График оптимального эффекта от бюджета
-    plt.figure(figsize=(10, 6))
-    plt.plot(x_grid, dp[n], marker="o", label="Оптимальный эффект g_n(x)")
-    plt.title("ПР2. Оптимальный эффект от объёма финансирования")
-    plt.xlabel("Объём финансирования x")
-    plt.ylabel("Максимальный эффект")
-    plt.grid(True)
-    plt.legend()
-    path1 = os.path.join(OUT_DIR, "pr2_optimal_effect.png")
-    plt.savefig(path1, dpi=160, bbox_inches="tight")
-    plt.close()
+F_star = g[n]
+F_max = F_star[-1]
 
-    # График прироста эффекта
-    plt.figure(figsize=(10, 6))
-    plt.plot([d[1] for d in dynamics], [d[3] for d in dynamics], marker="o", label="δF_j")
-    plt.title("ПР2. Прирост эффекта при увеличении финансирования")
-    plt.xlabel("Объём финансирования x")
-    plt.ylabel("Прирост эффекта δF")
-    plt.grid(True)
-    plt.legend()
-    path2 = os.path.join(OUT_DIR, "pr2_effect_growth.png")
-    plt.savefig(path2, dpi=160, bbox_inches="tight")
-    plt.close()
+# =========================================================
+# ПРЯМОЙ ХОД
+# =========================================================
 
-    # График коэффициента затухания
-    plt.figure(figsize=(10, 6))
-    plt.plot([d[1] for d in dynamics], [d[6] for d in dynamics], marker="o", label="η_j")
-    plt.title("ПР2. Коэффициент затухания динамики прироста эффекта")
-    plt.xlabel("Объём финансирования x")
-    plt.ylabel("η")
-    plt.grid(True)
-    plt.legend()
-    path3 = os.path.join(OUT_DIR, "pr2_decay_coefficient.png")
-    plt.savefig(path3, dpi=160, bbox_inches="tight")
-    plt.close()
+x_star = []
+remaining = C
 
-    print("\nГрафики сохранены:")
-    print(path1)
-    print(path2)
-    print(path3)
+for i in range(n, 0, -1):
 
-    print("\nВывод:")
-    print("Оптимальное распределение найдено методом динамического программирования.")
-    print("По мере роста финансирования предельный прирост эффекта обычно снижается,")
-    print("что отражается в изменении δF и росте/изменении коэффициента затухания η.")
+    xi = int(choice[i][remaining // delta])
+    x_star.append(xi)
+    remaining -= xi
 
+x_star = list(reversed(x_star))
 
-if __name__ == "__main__":
-    main()
+print("\n" + "=" * 100)
+print("ОПТИМАЛЬНОЕ РЕШЕНИЕ")
+print("=" * 100)
+
+print(f"Максимальный эффект F* = {int(F_max)}")
+print(f"Оптимальное распределение x* = {x_star}")
+
+print("\nПроверка распределения:")
+print(f"Сумма финансирования = {sum(x_star)}")
+print(f"Ограничение C = {C}")
+
+# =========================================================
+# ТАБЛИЦА БЕЛЛМАНА
+# =========================================================
+
+print("\n" + "=" * 100)
+print("ТАБЛИЦА ФУНКЦИЙ БЕЛЛМАНА")
+print("=" * 100)
+
+header = "g/x".rjust(8)
+
+for x in X:
+    header += f"{int(x):>8}"
+
+print(header)
+print("-" * len(header))
+
+for i in range(1, n + 1):
+
+    line = f"g{i}".rjust(8)
+
+    for value in g[i]:
+        line += f"{int(value):>8}"
+
+    print(line)
+
+# =========================================================
+# ТАБЛИЦА ПОКАЗАТЕЛЕЙ
+# =========================================================
+
+with np.errstate(divide="ignore", invalid="ignore"):
+    L_vals = F_star * (C / X)
+
+L_vals[0] = 0
+
+L1 = L_vals[1]
+
+v = np.zeros_like(L_vals)
+eta = np.zeros_like(L_vals)
+
+mask = L_vals != 0
+
+v[mask] = L_vals[mask] / L1
+eta[mask] = L1 / L_vals[mask]
+
+delta_F = np.diff(F_star, prepend=0)
+
+print("\n" + "=" * 100)
+print("ПОКАЗАТЕЛИ ДИНАМИКИ ПРИРОСТА ЭФФЕКТА")
+print("=" * 100)
+
+print(
+    f"{'x':>8} | {'F*':>8} | {'ΔF':>8} | {'L':>12} | "
+    f"{'v':>10} | {'η':>10}"
+)
+print("-" * 100)
+
+for i in range(1, len(X)):
+
+    print(
+        f"{int(X[i]):>8} | "
+        f"{int(F_star[i]):>8} | "
+        f"{int(delta_F[i]):>8} | "
+        f"{L_vals[i]:>12.2f} | "
+        f"{v[i]:>10.4f} | "
+        f"{eta[i]:>10.4f}"
+    )
+
+Eff = F_max / C
+
+print(f"\nЭффективность реализации мероприятий Eff = F*/C = {F_max}/{C} = {Eff:.4f}")
+
+# =========================================================
+# РЕГРЕССИОННЫЙ ПОЛИНОМ
+# =========================================================
+
+coeffs_x = np.polyfit(X, F_star, 2)
+a_x, b_x, c_x = coeffs_x
+poly_x = np.poly1d(coeffs_x)
+
+J = np.arange(len(X))
+coeffs_j = np.polyfit(J, F_star, 2)
+a_j, b_j, c_j = coeffs_j
+poly_j = np.poly1d(coeffs_j)
+
+print("\n" + "=" * 100)
+print("РЕГРЕССИОННЫЙ ПОЛИНОМ")
+print("=" * 100)
+
+print("\nПолином по объёму финансирования x:")
+print(f"F(x) = {a_x:.8f}x² + {b_x:.8f}x + {c_x:.8f}")
+
+print("\nТот же полином по номеру шага j = x / Δ:")
+print(f"F(j) = {a_j:.8f}j² + {b_j:.8f}j + {c_j:.8f}")
+
+print(
+    "\nПояснение: коэффициент при x² выглядит маленьким, "
+    "потому что x измеряется крупными значениями финансирования."
+)
+
+print(
+    "В шкале шагов j коэффициент становится нагляднее."
+)
+
+if abs(a_x) < 0.01:
+    print(
+        "Коэффициент при x² малый, поэтому затухание прироста эффекта происходит медленно."
+    )
+else:
+    print(
+        "Коэффициент при x² значительный, поэтому затухание выражено сильнее."
+    )
+
+# =========================================================
+# ЛИНЕЙНЫЙ ПРЕДЕЛ И РАЗНОСТЬ
+# =========================================================
+
+linear_k = F_max / C
+linear_poly = np.poly1d([linear_k, 0])
+
+diff_poly = poly_x - linear_poly
+
+print("\n" + "=" * 100)
+print("ЛИНЕЙНЫЙ ПРЕДЕЛ И РАЗНОСТЬ")
+print("=" * 100)
+
+print(f"L(x) = {linear_k:.8f}x")
+
+print("\nD(x) = F(x) - L(x)")
+print(
+    f"D(x) = {diff_poly.coefficients[0]:.8f}x² + "
+    f"{diff_poly.coefficients[1]:.8f}x + "
+    f"{diff_poly.coefficients[2]:.8f}"
+)
+
+# =========================================================
+# ТОЧКА ПЕРЕСЕЧЕНИЯ
+# =========================================================
+
+roots = np.roots(diff_poly)
+
+real_roots = [
+    r.real
+    for r in roots
+    if abs(r.imag) < 1e-7 and r.real > 0
+]
+
+print("\n" + "=" * 100)
+print("ТОЧКА ПЕРЕСЕЧЕНИЯ")
+print("=" * 100)
+
+if real_roots:
+
+    x_intersect = max(real_roots)
+    F_intersect = poly_x(x_intersect)
+    j_intersect = x_intersect / delta
+
+    print(f"x = {x_intersect:.2f}")
+    print(f"j = x / Δ = {j_intersect:.2f}")
+    print(f"F(x) = {F_intersect:.2f}")
+
+    print("\nИнтерпретация:")
+    print(
+        f"Предельная точка эффективности находится около x={x_intersect:.2f}, "
+        f"то есть около шага j={j_intersect:.2f}."
+    )
+
+    print(
+        "До этой точки увеличение финансирования ещё можно считать эффективным."
+    )
+
+    print(
+        "После этой точки прирост эффекта становится недостаточным относительно линейного предела."
+    )
+
+else:
+
+    x_intersect = None
+    F_intersect = None
+    print("Действительных положительных точек пересечения не найдено.")
+
+# =========================================================
+# ГРАФИКИ
+# =========================================================
+
+X_ext = np.linspace(0, 260, 400)
+F_ext = poly_x(X_ext)
+L_ext = linear_k * X_ext
+D_ext = F_ext - L_ext
+
+# График 1
+plt.figure(figsize=(12, 7))
+
+for i in range(n):
+    plt.plot(
+        X,
+        F_matrix[i],
+        marker="o",
+        linestyle="--",
+        alpha=0.6,
+        label=f"E{i + 1}(x)"
+    )
+
+plt.plot(
+    X,
+    F_star,
+    marker="s",
+    linewidth=3,
+    label="F*(x)"
+)
+
+plt.title("Функции эффекта мероприятий и результат Беллмана")
+plt.xlabel("Финансирование x")
+plt.ylabel("Эффект F")
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# График 2
+plt.figure(figsize=(12, 7))
+
+plt.plot(
+    X,
+    F_star,
+    "bo",
+    markersize=7,
+    label="Точки F*(x)"
+)
+
+plt.plot(
+    X_ext,
+    F_ext,
+    linewidth=3,
+    label="Регрессионный полином F(x)"
+)
+
+plt.plot(
+    X_ext,
+    L_ext,
+    linestyle="--",
+    linewidth=3,
+    label="Линейный предел L(x)"
+)
+
+if x_intersect is not None:
+    plt.plot(
+        x_intersect,
+        F_intersect,
+        "ro",
+        markersize=10,
+        label=f"Пересечение ≈ {x_intersect:.2f}"
+    )
+
+plt.title("Наложение регрессии и линейного предела")
+plt.xlabel("Финансирование x")
+plt.ylabel("Эффект F")
+plt.xlim(0, 260)
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# График 3
+plt.figure(figsize=(12, 7))
+
+plt.plot(
+    X_ext,
+    D_ext,
+    linewidth=3,
+    label="D(x) = F(x) - L(x)"
+)
+
+plt.axhline(
+    0,
+    linestyle="--",
+    linewidth=2,
+    label="D(x) = 0"
+)
+
+if x_intersect is not None:
+    plt.plot(
+        x_intersect,
+        0,
+        "ro",
+        markersize=10,
+        label=f"D(x)=0 при x≈{x_intersect:.2f}"
+    )
+
+plt.title("Разность между регрессией и линейным пределом")
+plt.xlabel("Финансирование x")
+plt.ylabel("D(x)")
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# =========================================================
+# ИНДИВИДУАЛЬНЫЙ ВЫВОД
+# =========================================================
+
+print("\n" + "=" * 100)
+print("ИНДИВИДУАЛЬНЫЙ ВЫВОД")
+print("=" * 100)
+
+print(
+    "Оптимальное распределение финансирования для варианта 32 равно "
+    f"x* = {x_star}, максимальный эффект F* = {int(F_max)}."
+)
+
+print(
+    "Регрессионный полином имеет отрицательный коэффициент при x², "
+    "поэтому кривая эффекта является вогнутой."
+)
+
+print(
+    "Коэффициент при x² малый, значит затухание прироста эффекта идёт медленно."
+)
+
+print(
+    "Это подтверждается таблицей ΔF: прирост эффекта снижается не резко, "
+    "а постепенно."
+)
+
+print(
+    "Линейный предел L(x) показывает условную границу эффективности затрат."
+)
+
+print(
+    "Разность D(x) = F(x) - L(x) позволяет определить предельную точку, "
+    "после которой дальнейшее увеличение финансирования становится менее выгодным."
+)
+
+if x_intersect is not None:
+    print(
+        f"Для моего варианта точка пересечения находится около x={x_intersect:.2f}, "
+        f"то есть около шага j={j_intersect:.2f}."
+    )
+
+print(
+    "До этой точки финансирование можно считать эффективным, "
+    "а после неё дальнейший рост затрат даёт недостаточный прирост эффекта."
+)
