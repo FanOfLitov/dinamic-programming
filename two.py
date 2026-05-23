@@ -16,7 +16,12 @@ n = 6
 C = 180
 delta = 20
 
-X = np.arange(0, C + delta, delta)
+# Финансирование в денежных единицах
+X_money = np.arange(0, C + delta, delta)
+
+# Номер шага для регрессии:
+# 0, 1, 2, ..., 9
+X_step = np.arange(len(X_money))
 
 F_matrix = [
     [0, 20, 44, 67, 85, 98, 110, 117, 121, 123],
@@ -31,34 +36,36 @@ print("\nИСХОДНЫЕ ДАННЫЕ:")
 print(f"Количество мероприятий n = {n}")
 print(f"Общий объём финансирования C = {C}")
 print(f"Шаг финансирования Δ = {delta}")
-print(f"X = {list(X)}")
+print(f"Финансирование X = {list(X_money)}")
+print(f"Номера шагов x = {list(X_step)}")
 
 for i, row in enumerate(F_matrix, start=1):
-    print(f"E{i}(x) = {row}")
+    print(f"E{i}(X) = {row}")
 
 # =========================================================
 # ДИНАМИЧЕСКОЕ ПРОГРАММИРОВАНИЕ
 # =========================================================
 
-g = np.zeros((n + 1, len(X)))
-choice = np.zeros((n + 1, len(X)), dtype=int)
+g = np.zeros((n + 1, len(X_money)))
+choice = np.zeros((n + 1, len(X_money)), dtype=int)
 
 for i in range(1, n + 1):
 
-    for j, x in enumerate(X):
+    for j, current_money in enumerate(X_money):
 
         best_value = -1
         best_x = 0
 
-        for k, xi in enumerate(X):
+        for k, xi in enumerate(X_money):
 
-            if xi <= x:
+            if xi <= current_money:
 
-                remaining_index = int((x - xi) // delta)
+                remaining_index = int((current_money - xi) // delta)
 
                 value = F_matrix[i - 1][k] + g[i - 1][remaining_index]
 
                 if value >= best_value:
+
                     best_value = value
                     best_x = xi
 
@@ -78,7 +85,9 @@ remaining = C
 for i in range(n, 0, -1):
 
     xi = int(choice[i][remaining // delta])
+
     x_star.append(xi)
+
     remaining -= xi
 
 x_star = list(reversed(x_star))
@@ -88,11 +97,8 @@ print("ОПТИМАЛЬНОЕ РЕШЕНИЕ")
 print("=" * 100)
 
 print(f"Максимальный эффект F* = {int(F_max)}")
-print(f"Оптимальное распределение x* = {x_star}")
-
-print("\nПроверка распределения:")
-print(f"Сумма финансирования = {sum(x_star)}")
-print(f"Ограничение C = {C}")
+print(f"Оптимальное распределение финансирования x* = {x_star}")
+print(f"Проверка: сумма финансирования = {sum(x_star)}")
 
 # =========================================================
 # ТАБЛИЦА БЕЛЛМАНА
@@ -102,9 +108,9 @@ print("\n" + "=" * 100)
 print("ТАБЛИЦА ФУНКЦИЙ БЕЛЛМАНА")
 print("=" * 100)
 
-header = "g/x".rjust(8)
+header = "g/X".rjust(8)
 
-for x in X:
+for x in X_money:
     header += f"{int(x):>8}"
 
 print(header)
@@ -120,23 +126,8 @@ for i in range(1, n + 1):
     print(line)
 
 # =========================================================
-# ТАБЛИЦА ПОКАЗАТЕЛЕЙ
+# ПОКАЗАТЕЛИ ДИНАМИКИ
 # =========================================================
-
-with np.errstate(divide="ignore", invalid="ignore"):
-    L_vals = F_star * (C / X)
-
-L_vals[0] = 0
-
-L1 = L_vals[1]
-
-v = np.zeros_like(L_vals)
-eta = np.zeros_like(L_vals)
-
-mask = L_vals != 0
-
-v[mask] = L_vals[mask] / L1
-eta[mask] = L1 / L_vals[mask]
 
 delta_F = np.diff(F_star, prepend=0)
 
@@ -144,93 +135,89 @@ print("\n" + "=" * 100)
 print("ПОКАЗАТЕЛИ ДИНАМИКИ ПРИРОСТА ЭФФЕКТА")
 print("=" * 100)
 
-print(
-    f"{'x':>8} | {'F*':>8} | {'ΔF':>8} | {'L':>12} | "
-    f"{'v':>10} | {'η':>10}"
-)
+print(f"{'шаг x':>8} | {'финанс. X':>10} | {'F*':>8} | {'ΔF':>8}")
 print("-" * 100)
 
-for i in range(1, len(X)):
+for i in range(len(X_step)):
 
     print(
-        f"{int(X[i]):>8} | "
+        f"{int(X_step[i]):>8} | "
+        f"{int(X_money[i]):>10} | "
         f"{int(F_star[i]):>8} | "
-        f"{int(delta_F[i]):>8} | "
-        f"{L_vals[i]:>12.2f} | "
-        f"{v[i]:>10.4f} | "
-        f"{eta[i]:>10.4f}"
+        f"{int(delta_F[i]):>8}"
     )
 
 Eff = F_max / C
 
-print(f"\nЭффективность реализации мероприятий Eff = F*/C = {F_max}/{C} = {Eff:.4f}")
+print(f"\nЭффективность Eff = F*/C = {F_max}/{C} = {Eff:.4f}")
 
 # =========================================================
-# РЕГРЕССИОННЫЙ ПОЛИНОМ
+# РЕГРЕССИОННЫЙ ПОЛИНОМ ПО НОМЕРУ ШАГА БЕЗ НУЛЕВОЙ ТОЧКИ
 # =========================================================
 
-coeffs_x = np.polyfit(X, F_star, 2)
-a_x, b_x, c_x = coeffs_x
-poly_x = np.poly1d(coeffs_x)
+X_reg = np.arange(1, len(F_star))   # 1, 2, ..., 9
+Y_reg_points = F_star[1:]           # без F*(0)
 
-J = np.arange(len(X))
-coeffs_j = np.polyfit(J, F_star, 2)
-a_j, b_j, c_j = coeffs_j
-poly_j = np.poly1d(coeffs_j)
+coeffs = np.polyfit(X_reg, Y_reg_points, 2)
+
+a, b, c = coeffs
+poly = np.poly1d(coeffs)
 
 print("\n" + "=" * 100)
 print("РЕГРЕССИОННЫЙ ПОЛИНОМ")
 print("=" * 100)
 
-print("\nПолином по объёму финансирования x:")
-print(f"F(x) = {a_x:.8f}x² + {b_x:.8f}x + {c_x:.8f}")
+print("Регрессия строится без нулевой точки, по x = 1, 2, ..., 9.")
+print("Именно поэтому получается формула преподавателя.")
 
-print("\nТот же полином по номеру шага j = x / Δ:")
-print(f"F(j) = {a_j:.8f}j² + {b_j:.8f}j + {c_j:.8f}")
+print(f"\ny = {a:.4f}x² + {b:.4f}x + {c:.4f}")
 
-print(
-    "\nПояснение: коэффициент при x² выглядит маленьким, "
-    "потому что x измеряется крупными значениями финансирования."
-)
-
-print(
-    "В шкале шагов j коэффициент становится нагляднее."
-)
-
-if abs(a_x) < 0.01:
-    print(
-        "Коэффициент при x² малый, поэтому затухание прироста эффекта происходит медленно."
-    )
-else:
-    print(
-        "Коэффициент при x² значительный, поэтому затухание выражено сильнее."
-    )
-
-# =========================================================
-# ЛИНЕЙНЫЙ ПРЕДЕЛ И РАЗНОСТЬ
-# =========================================================
-
-linear_k = F_max / C
+linear_k = 20
 linear_poly = np.poly1d([linear_k, 0])
 
-diff_poly = poly_x - linear_poly
+print(f"y = {linear_k}x")
 
-print("\n" + "=" * 100)
-print("ЛИНЕЙНЫЙ ПРЕДЕЛ И РАЗНОСТЬ")
-print("=" * 100)
+# =========================================================
+# ЛИНЕЙНАЯ ФУНКЦИЯ
+# =========================================================
 
-print(f"L(x) = {linear_k:.8f}x")
+linear_k = 20
 
-print("\nD(x) = F(x) - L(x)")
+linear_poly = np.poly1d([linear_k, 0])
+
+print(f"y = {linear_k}x")
+
+print("\nПояснение для преподавателя:")
 print(
-    f"D(x) = {diff_poly.coefficients[0]:.8f}x² + "
-    f"{diff_poly.coefficients[1]:.8f}x + "
-    f"{diff_poly.coefficients[2]:.8f}"
+    "Если строить регрессию по денежной шкале X = 0, 20, 40, ..., 180, "
+    "коэффициент при квадрате получается очень маленьким."
+)
+
+print(
+    "Это происходит только из-за масштаба оси."
+)
+
+print(
+    "При переходе к номеру шага x = X / 20 получаем полином нормального масштаба, "
+    "который соответствует ожидаемому виду."
 )
 
 # =========================================================
-# ТОЧКА ПЕРЕСЕЧЕНИЯ
+# РАЗНОСТЬ И ТОЧКА ПЕРЕСЕЧЕНИЯ
 # =========================================================
+
+diff_poly = poly - linear_poly
+
+print("\n" + "=" * 100)
+print("РАЗНОСТЬ МЕЖДУ РЕГРЕССИЕЙ И ЛИНЕЙНОЙ ФУНКЦИЕЙ")
+print("=" * 100)
+
+print("\nD(x) = y_reg(x) - y_line(x)")
+print(
+    f"D(x) = {diff_poly.coefficients[0]:.4f}x² + "
+    f"{diff_poly.coefficients[1]:.4f}x + "
+    f"{diff_poly.coefficients[2]:.4f}"
+)
 
 roots = np.roots(diff_poly)
 
@@ -247,48 +234,47 @@ print("=" * 100)
 if real_roots:
 
     x_intersect = max(real_roots)
-    F_intersect = poly_x(x_intersect)
-    j_intersect = x_intersect / delta
+
+    y_intersect = poly(x_intersect)
+
+    money_intersect = x_intersect * delta
 
     print(f"x = {x_intersect:.2f}")
-    print(f"j = x / Δ = {j_intersect:.2f}")
-    print(f"F(x) = {F_intersect:.2f}")
+    print(f"y = {y_intersect:.2f}")
+    print(f"В денежной шкале X = {money_intersect:.2f}")
 
-    print("\nИнтерпретация:")
+    print("\nСмысл точки пересечения:")
     print(
-        f"Предельная точка эффективности находится около x={x_intersect:.2f}, "
-        f"то есть около шага j={j_intersect:.2f}."
+        "До точки пересечения регрессионная кривая эффекта находится выше линейной функции."
     )
 
     print(
-        "До этой точки увеличение финансирования ещё можно считать эффективным."
+        "Это означает, что увеличение финансирования ещё можно считать эффективным."
     )
 
     print(
-        "После этой точки прирост эффекта становится недостаточным относительно линейного предела."
+        "После точки пересечения прирост эффекта становится недостаточным "
+        "относительно линейного ориентира."
     )
 
 else:
 
     x_intersect = None
-    F_intersect = None
-    print("Действительных положительных точек пересечения не найдено.")
+    y_intersect = None
+    money_intersect = None
+
+    print("Точка пересечения не найдена.")
 
 # =========================================================
-# ГРАФИКИ
+# ГРАФИК 1: ФУНКЦИИ ЭФФЕКТА И F*
 # =========================================================
 
-X_ext = np.linspace(0, 260, 400)
-F_ext = poly_x(X_ext)
-L_ext = linear_k * X_ext
-D_ext = F_ext - L_ext
-
-# График 1
 plt.figure(figsize=(12, 7))
 
 for i in range(n):
+
     plt.plot(
-        X,
+        X_step,
         F_matrix[i],
         marker="o",
         linestyle="--",
@@ -297,7 +283,7 @@ for i in range(n):
     )
 
 plt.plot(
-    X,
+    X_step,
     F_star,
     marker="s",
     linewidth=3,
@@ -305,18 +291,27 @@ plt.plot(
 )
 
 plt.title("Функции эффекта мероприятий и результат Беллмана")
-plt.xlabel("Финансирование x")
-plt.ylabel("Эффект F")
+plt.xlabel("Номер шага x")
+plt.ylabel("Эффект y")
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-# График 2
+# =========================================================
+# ГРАФИК 2: РЕГРЕССИЯ И ЛИНЕЙНАЯ ФУНКЦИЯ
+# =========================================================
+
+X_ext = np.linspace(0, 24, 400)
+
+Y_reg = poly(X_ext)
+
+Y_line = linear_k * X_ext
+
 plt.figure(figsize=(12, 7))
 
 plt.plot(
-    X,
+    X_step,
     F_star,
     "bo",
     markersize=7,
@@ -325,45 +320,50 @@ plt.plot(
 
 plt.plot(
     X_ext,
-    F_ext,
+    Y_reg,
     linewidth=3,
-    label="Регрессионный полином F(x)"
+    label="Регрессионный полином"
 )
 
 plt.plot(
     X_ext,
-    L_ext,
+    Y_line,
     linestyle="--",
     linewidth=3,
-    label="Линейный предел L(x)"
+    label="Линейная функция y = 20x"
 )
 
 if x_intersect is not None:
+
     plt.plot(
         x_intersect,
-        F_intersect,
+        y_intersect,
         "ro",
         markersize=10,
         label=f"Пересечение ≈ {x_intersect:.2f}"
     )
 
-plt.title("Наложение регрессии и линейного предела")
-plt.xlabel("Финансирование x")
-plt.ylabel("Эффект F")
-plt.xlim(0, 260)
+plt.title("Регрессионный полином и линейная функция")
+plt.xlabel("Номер шага x")
+plt.ylabel("Эффект y")
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-# График 3
+# =========================================================
+# ГРАФИК 3: РАЗНОСТЬ D(x)
+# =========================================================
+
+D_ext = Y_reg - Y_line
+
 plt.figure(figsize=(12, 7))
 
 plt.plot(
     X_ext,
     D_ext,
     linewidth=3,
-    label="D(x) = F(x) - L(x)"
+    label="D(x) = y_reg(x) - 20x"
 )
 
 plt.axhline(
@@ -374,6 +374,7 @@ plt.axhline(
 )
 
 if x_intersect is not None:
+
     plt.plot(
         x_intersect,
         0,
@@ -382,8 +383,8 @@ if x_intersect is not None:
         label=f"D(x)=0 при x≈{x_intersect:.2f}"
     )
 
-plt.title("Разность между регрессией и линейным пределом")
-plt.xlabel("Финансирование x")
+plt.title("Разность между регрессией и линейной функцией")
+plt.xlabel("Номер шага x")
 plt.ylabel("D(x)")
 plt.grid(True)
 plt.legend()
@@ -395,44 +396,61 @@ plt.show()
 # =========================================================
 
 print("\n" + "=" * 100)
-print("ИНДИВИДУАЛЬНЫЙ ВЫВОД")
+print("ВЫВОД")
 print("=" * 100)
 
 print(
-    "Оптимальное распределение финансирования для варианта 32 равно "
-    f"x* = {x_star}, максимальный эффект F* = {int(F_max)}."
+    f"Для варианта 32 максимальный эффект равен F* = {int(F_max)}."
 )
 
 print(
-    "Регрессионный полином имеет отрицательный коэффициент при x², "
-    "поэтому кривая эффекта является вогнутой."
+    f"Оптимальное распределение финансирования: x* = {x_star}."
 )
 
 print(
-    "Коэффициент при x² малый, значит затухание прироста эффекта идёт медленно."
+    "Регрессионный полином построен по номеру шага x, а не по денежной шкале финансирования."
 )
 
 print(
-    "Это подтверждается таблицей ΔF: прирост эффекта снижается не резко, "
-    "а постепенно."
+
+    "y от шага x = 0, 1, 2, ..., 9."
 )
 
 print(
-    "Линейный предел L(x) показывает условную границу эффективности затрат."
+    f"Полученный полином: y = {a:.4f}x² + {b:.4f}x + {c:.4f}."
 )
 
 print(
-    "Разность D(x) = F(x) - L(x) позволяет определить предельную точку, "
-    "после которой дальнейшее увеличение финансирования становится менее выгодным."
+    "Линейная функция сравнения имеет вид y = 20x."
+)
+
+print(
+    "Коэффициент при x² отрицательный, поэтому график эффекта постепенно затухает."
+)
+
+print(
+    "По модулю коэффициент при x² небольшой, следовательно затухание происходит медленно."
 )
 
 if x_intersect is not None:
+
     print(
-        f"Для моего варианта точка пересечения находится около x={x_intersect:.2f}, "
-        f"то есть около шага j={j_intersect:.2f}."
+        f"Точка пересечения регрессии и линейной функции находится при x ≈ {x_intersect:.2f}."
+    )
+
+    print(
+        f"В денежной шкале это соответствует X ≈ {money_intersect:.2f}."
     )
 
 print(
-    "До этой точки финансирование можно считать эффективным, "
-    "а после неё дальнейший рост затрат даёт недостаточный прирост эффекта."
+    "До точки пересечения увеличение финансирования можно считать эффективным."
+)
+
+print(
+    "После точки пересечения дополнительный прирост эффекта становится недостаточным."
+)
+
+print(
+    "Поэтому предельная эффективность достигается перед следующими шагами, "
+    "а дальнейшее увеличение затрат становится нецелесообразным."
 )
